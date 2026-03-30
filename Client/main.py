@@ -403,9 +403,11 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
             "quick_paste": True,
             "relative_mouse": False,
             "mouse_jitter": False,
+            "mouse_jitter_timeout": 60,
         }
         self.set_checked(self.actionDark_theme, dark_theme)
         self.status["mouse_jitter"] = self.config.get("mouse_jitter", False)
+        self.status["mouse_jitter_timeout"] = self.config.get("mouse_jitter_timeout", 60)
 
         # 获取显示器分辨率大小
         self.desktop = QGuiApplication.primaryScreen()
@@ -1757,14 +1759,42 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         )
 
     def mouse_jitter_func(self):
-        self.status["mouse_jitter"] = not self.status["mouse_jitter"]
-        self.config["mouse_jitter"] = self.status["mouse_jitter"]
-        self.configfile["config"]["mouse_jitter"] = self.status["mouse_jitter"]
-        self.save_config()
-        self.set_checked(self.actionMouse_jitter, self.status["mouse_jitter"])
-        self.statusBar().showMessage(
-            self.tr("Mouse jitter: ") + str_bool(self.status["mouse_jitter"])
-        )
+        # 如果鼠标抖动已启用，显示设置对话框
+        if self.status["mouse_jitter"]:
+            # 禁用鼠标抖动
+            self.status["mouse_jitter"] = False
+            self.config["mouse_jitter"] = False
+            self.configfile["config"]["mouse_jitter"] = False
+            self.save_config()
+            self.set_checked(self.actionMouse_jitter, False)
+            self.statusBar().showMessage(
+                self.tr("Mouse jitter: ") + str_bool(False)
+            )
+        else:
+            # 启用鼠标抖动前，让用户设置超时时间
+            timeout, ok = QInputDialog.getInt(
+                self,
+                self.tr("Mouse Jitter Timeout Settings"),
+                self.tr("Enter idle timeout (seconds):"),
+                self.status["mouse_jitter_timeout"],
+                1,
+                3600,
+                1
+            )
+            
+            if ok:
+                self.status["mouse_jitter_timeout"] = timeout
+                self.config["mouse_jitter_timeout"] = timeout
+                self.configfile["config"]["mouse_jitter_timeout"] = timeout
+                
+                self.status["mouse_jitter"] = True
+                self.config["mouse_jitter"] = True
+                self.configfile["config"]["mouse_jitter"] = True
+                self.save_config()
+                self.set_checked(self.actionMouse_jitter, True)
+                self.statusBar().showMessage(
+                    self.tr("Mouse jitter: ") + str_bool(True) + f" ({timeout}s)"
+                )
 
     # 粘贴板
     def paste_board_func(self):
@@ -2308,10 +2338,10 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
                 QCursor.setPos(middle_pos)
 
     def mouse_report_timeout(self):
-        # 检查是否启用抖动，且是否空闲超过1分钟
+        # 检查是否启用抖动，且是否空闲超过配置的超时时间
         enable_jitter = (
             self.status["mouse_jitter"]
-            and (time.perf_counter() - self._last_input_time) >= 60
+            and (time.perf_counter() - self._last_input_time) >= self.status["mouse_jitter_timeout"]
         )
         
         if self._new_mouse_report == 1:

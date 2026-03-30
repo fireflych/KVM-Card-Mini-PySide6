@@ -1039,6 +1039,14 @@ or delete the config.yaml to reset the config file.</source>
         <translation>鼠标抖动： </translation>
     </message>
     <message>
+        <source>Mouse Jitter Timeout Settings</source>
+        <translation>鼠标抖动超时设置</translation>
+    </message>
+    <message>
+        <source>Enter idle timeout (seconds):</source>
+        <translation>输入空闲超时时间（秒）：</translation>
+    </message>
+    <message>
         <location filename="main.py" line="1799"/>
         <source>Select file</source>
         <translation>选择文件</translation>

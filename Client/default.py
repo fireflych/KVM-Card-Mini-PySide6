@@ -6,6 +6,7 @@ default_config = """config:
   mouse_report_freq: 60
   relative_mouse_speed: 0.3
   mouse_jitter: false
+  mouse_jitter_timeout: 60
 paste_board:
   click_interval: 2
   packet_size: 1000
