@@ -1,3 +1,4 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="zh_CN">
@@ -834,6 +835,11 @@ del</source>
         <translation>相对鼠标模式</translation>
     </message>
     <message>
+        <location filename="ui/main.ui" line="858"/>
+        <source>Mouse jitter</source>
+        <translation>鼠标抖动</translation>
+    </message>
+    <message>
         <location filename="ui/main.ui" line="862"/>
         <source>USB Switch Set</source>
         <translation>USB切换器</translation>
@@ -1026,6 +1032,11 @@ or delete the config.yaml to reset the config file.</source>
         <location filename="main.py" line="1749"/>
         <source>Relative mouse: </source>
         <translation>相对鼠标模式： </translation>
+    </message>
+    <message>
+        <location filename="main.py" line="1750"/>
+        <source>Mouse jitter: </source>
+        <translation>鼠标抖动： </translation>
     </message>
     <message>
         <location filename="main.py" line="1799"/>

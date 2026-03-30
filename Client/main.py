@@ -402,8 +402,10 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
             "RGB_mode": False,
             "quick_paste": True,
             "relative_mouse": False,
+            "mouse_jitter": False,
         }
         self.set_checked(self.actionDark_theme, dark_theme)
+        self.status["mouse_jitter"] = self.config.get("mouse_jitter", False)
 
         # 获取显示器分辨率大小
         self.desktop = QGuiApplication.primaryScreen()
@@ -519,12 +521,15 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         self.actionRefresh_device_list.setIcon(load_icon("reload"))
         self.actionWeb_client.setIcon(load_icon("web"))
         self.actionRelative_mouse.setIcon(load_icon("relative"))
+        self.actionMouse_jitter.setIcon(load_icon("cursor"))
         self.actionUSB_Switch_Set.setIcon(load_icon("swap"))
         self.actionUSB_Auto_Switch.setIcon(load_icon("swap-auto"))
 
         if self.video_config["keep_aspect_ratio"]:
             self.set_checked(self.actionKeep_ratio, True)
         self.set_checked(self.actionQuick_paste, True)
+        self.set_checked(self.actionRelative_mouse, self.status["relative_mouse"])
+        self.set_checked(self.actionMouse_jitter, self.status["mouse_jitter"])
 
         # 初始化监视器
         self.setCentralWidget(self.serverFrame)
@@ -591,6 +596,7 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         self.actionNum_Keyboard.triggered.connect(self.num_keyboard_func)
         self.actionSystem_hook.triggered.connect(self.system_hook_func)
         self.actionRelative_mouse.triggered.connect(self.relative_mouse_func)
+        self.actionMouse_jitter.triggered.connect(self.mouse_jitter_func)
 
         self.actionOn_screen_Keyboard.triggered.connect(
             lambda: self.menu_tools_actions(0)
@@ -697,6 +703,7 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         self._new_mouse_report = 0
         self.rel_x = 0
         self.rel_y = 0
+        self._last_input_time = time.perf_counter()  # 追踪最后输入时间
         self._mouse_report_timer = QTimer()
         self._mouse_report_timer.timeout.connect(self.mouse_report_timeout)
         self._mouse_report_timer.start(self.mouse_report_interval)
@@ -1749,6 +1756,16 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
             self.tr("Relative mouse: ") + str_bool(self.status["relative_mouse"])
         )
 
+    def mouse_jitter_func(self):
+        self.status["mouse_jitter"] = not self.status["mouse_jitter"]
+        self.config["mouse_jitter"] = self.status["mouse_jitter"]
+        self.configfile["config"]["mouse_jitter"] = self.status["mouse_jitter"]
+        self.save_config()
+        self.set_checked(self.actionMouse_jitter, self.status["mouse_jitter"])
+        self.statusBar().showMessage(
+            self.tr("Mouse jitter: ") + str_bool(self.status["mouse_jitter"])
+        )
+
     # 粘贴板
     def paste_board_func(self):
         addheight = 0
@@ -2100,6 +2117,7 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
     def mousePressEvent(self, event):
         if self.ignore_event:
             return
+        self._last_input_time = time.perf_counter()  # 更新最后输入时间
         if (
                 not self.status["mouse_capture"]
                 and self.device_connected
@@ -2124,6 +2142,7 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
     def mouseReleaseEvent(self, event):
         if self.ignore_event:
             return
+        self._last_input_time = time.perf_counter()  # 更新最后输入时间
         if not self.status["mouse_capture"]:
             return
         if not self.status["relative_mouse"]:
@@ -2139,6 +2158,7 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
     def wheelEvent(self, event):
         if self.ignore_event:
             return
+        self._last_input_time = time.perf_counter()  # 更新最后输入时间
         if not self.status["mouse_capture"]:
             return
         if not self.status["relative_mouse"]:
@@ -2187,6 +2207,7 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
     def mouseMoveEvent(self, event):
         if self.ignore_event:
             return
+        self._last_input_time = time.perf_counter()  # 更新最后输入时间
         p = event.position().toPoint()
         x, y = p.x(), p.y()
         if self.status["fullscreen"]:
@@ -2287,13 +2308,39 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
                 QCursor.setPos(middle_pos)
 
     def mouse_report_timeout(self):
+        # 检查是否启用抖动，且是否空闲超过1分钟
+        enable_jitter = (
+            self.status["mouse_jitter"]
+            and (time.perf_counter() - self._last_input_time) >= 60
+        )
+        
         if self._new_mouse_report == 1:
-            self._hid_signal.emit(mouse_buffer)
+            if enable_jitter:
+                jitter_x = random.randint(-100, 100)
+                jitter_y = random.randint(-100, 100)
+                orig_x = (mouse_buffer[4] << 8) | mouse_buffer[3]
+                orig_y = (mouse_buffer[6] << 8) | mouse_buffer[5]
+                x_hid = max(min(orig_x + jitter_x, 0x7FFF), 0)
+                y_hid = max(min(orig_y + jitter_y, 0x7FFF), 0)
+                mouse_buffer[3] = x_hid & 0xFF
+                mouse_buffer[4] = x_hid >> 8
+                mouse_buffer[5] = y_hid & 0xFF
+                mouse_buffer[6] = y_hid >> 8
+                self._hid_signal.emit(mouse_buffer)
+                mouse_buffer[3] = orig_x & 0xFF
+                mouse_buffer[4] = orig_x >> 8
+                mouse_buffer[5] = orig_y & 0xFF
+                mouse_buffer[6] = orig_y >> 8
+            else:
+                self._hid_signal.emit(mouse_buffer)
         elif self._new_mouse_report == 2:
             x_hid = round(self.rel_x)
             y_hid = round(self.rel_y)
             self.rel_x -= x_hid
             self.rel_y -= y_hid
+            if enable_jitter:
+                x_hid += random.randint(-2, 2)
+                y_hid += random.randint(-2, 2)
             x_hid = max(min(x_hid, 127), -127)
             y_hid = max(min(y_hid, 127), -127)
             x_hid += 0xFF if x_hid < 0 else 0
@@ -2397,6 +2444,7 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
             return
         if event.isAutoRepeat():
             return
+        self._last_input_time = time.perf_counter()  # 更新最后输入时间
         # Ctrl+Alt+Shift+F11 退出全屏
         if kb_buffer[2] == 7 and event.key() == self.fullscreen_key:
             self.fullscreen_func()
@@ -2433,6 +2481,7 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
             return
         if self.ignore_event:
             return
+        self._last_input_time = time.perf_counter()  # 更新最后输入时间
         self.keyRelease(event.nativeScanCode())
 
     def keyRelease(self, scancode: int):
